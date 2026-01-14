@@ -1,6 +1,7 @@
 const sideMenu = document.getElementById("sideMenu");
 const menuOverlay = document.getElementById("menuOverlay");
 
+let proposalSaved = false;
 
 let viewOnlyMode = false;
 
@@ -75,93 +76,21 @@ function toggleProducts(){
 ====================== */
 function generateProposal(){
 
-  if(viewOnlyMode){ alert("This proposal is view-only"); return; }
-
-  const ownerVal = ownerInput.value || "-";
-  const locVal = locationInput.value || "-";
-
-  if(!Object.keys(cart).length){
-  showAlert("No selected products");
+  if(proposalSaved){
+  showAlert("Proposal already saved.", "Notice");
   return;
 }
 
-
-  let rows = "";
-  let totalQty = 0;
-  let totalRetail = 0;
-  let totalSelling = 0;
-  let totalProfit = 0;
-
-  Object.values(cart).forEach(p=>{
-    const itemRetail = p.retail * p.qty;
-    const itemSelling = p.selling * p.qty;
-    const profit = itemSelling - itemRetail;
-
-    totalQty += p.qty;
-    totalRetail += itemRetail;
-    totalSelling += itemSelling;
-    totalProfit += profit;
-
-    rows += `
-      <tr>
-        <td>${p.name}</td>
-        <td>${p.qty}</td>
-        <td>₱${itemRetail.toLocaleString()}</td>
-        <td>₱${itemSelling.toLocaleString()}</td>
-        <td>₱${profit.toLocaleString()}</td>
-      </tr>
-    `;
-  });
-
-  previewBox.innerHTML = `
-  <h3>📄 Proposal Preview</h3>
-
-
-  <p><b>Owner:</b> ${ownerVal}</p>
-  <p><b>Location:</b> ${locVal}</p>
-  <p><b>Capital:</b> ₱${totalRetail.toLocaleString()}</p>
-
-  <p><b>Date:</b> ${new Date().toLocaleDateString()}</p>
-
-  <table class="cart-table">
-    <thead>
-      <tr>
-        <th>Product</th>
-        <th>Qty</th>
-        <th>Retail</th>
-        <th>Selling</th>
-        <th>Profit</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${rows}
-    </tbody>
-  </table>
-
-  <div class="summary-box">
-    <div class="summary-row">
-      <span>Total Retail</span>
-      <strong>₱${totalRetail.toLocaleString()}</strong>
-    </div>
-    <div class="summary-row">
-      <span>Total Selling</span>
-      <strong>₱${totalSelling.toLocaleString()}</strong>
-    </div>
-    <div class="summary-row highlight">
-      <span>Total Profit</span>
-      <strong>₱${totalProfit.toLocaleString()}</strong>
-    </div>
-  </div>
-
-  <button class="secondary-btn" onclick="exitViewMode()">⬅ Back</button>
-`;
-
-
-
-  document.getElementById("proposalPreview").style.display = "block";
-  document.getElementById("proposalPreview")
-    .scrollIntoView({ behavior:"smooth" });
+if(!Object.keys(cart).length){
+  showAlert("No selected products", "Notice");
+  return;
 }
+
+document.querySelector("#newProposal .primary-btn").disabled = true;
+saveProposal();
+
+}
+
 
 
 
@@ -205,7 +134,7 @@ const totalSellingEl = document.getElementById("totalSelling");
 // 🔥 DOM REFERENCES (FIX)
 const ownerInput = document.getElementById("owner");
 const locationInput = document.getElementById("businessLocation");
-const previewBox = document.getElementById("preview");
+
 const capitalInput = document.getElementById("capital");
 
 
@@ -256,12 +185,10 @@ function renderProducts(){
 
 function addProduct(){
 
-  // 🔥 BLOCK BASE64 IMAGES FIRST
+  document.activeElement?.blur(); // 🔥 IMPORTANT
+
   if(pImg.value.startsWith("data:image")){
-    showAlert(
-      "Huwag base64 image. Gumamit ng image URL lang.",
-      "Invalid Image"
-    );
+    showAlert("Huwag base64 image. Gumamit ng image URL lang.", "Invalid Image");
     return;
   }
 
@@ -274,28 +201,22 @@ function addProduct(){
     pack: Number(pPack.value) || 1
   };
 
-  // 🔥 REQUIRED FIELDS CHECK
   if(!p.name || !p.retail || !p.selling){
-    showAlert(
-      "Please complete all required fields before adding the product.",
-      "Incomplete Information"
-    );
+    showAlert("Please complete all required fields.", "Incomplete");
     return;
   }
 
-  // ✅ SAVE IN MEMORY
   products.push(p);
 
-  // ✅ SAVE IN INDEXEDDB (ITO ANG KULANG MO)
   const tx = db.transaction("products", "readwrite");
   tx.objectStore("products").put(p);
 
   closeAddProductModal();
   renderProducts();
 
-  // RESET INPUTS
   pName.value = pRetail.value = pSelling.value = pImg.value = pPack.value = "";
 }
+
 
 
 
@@ -463,17 +384,17 @@ function deleteProduct(){
   const id = Number(editId.value);
   if(!id) return;
 
-  if(!confirm("Delete this product?")) return;
+  showConfirm("Delete this product?", () => {
+    products = products.filter(p => p.id !== id);
 
-  products = products.filter(p=>p.id !== id);
-  
-  const tx = db.transaction("products", "readwrite");
-tx.objectStore("products").delete(id);
+    const tx = db.transaction("products", "readwrite");
+    tx.objectStore("products").delete(id);
 
-
-  closeEditProductModal();
-  renderProducts();
+    closeEditProductModal();
+    renderProducts();
+  }, "Delete Product");
 }
+
 function resetCart(){
   if(!Object.keys(cart).length) return;
 
@@ -643,9 +564,10 @@ function loadBusinessInfo(){
 
 function saveProposal(){
   if(!db){
-  box.innerHTML = "<p>Loading database...</p>";
+  showAlert("Database is still loading. Please try again.", "Loading");
   return;
 }
+
 
 
   const data = {
@@ -668,13 +590,21 @@ time: new Date().toLocaleTimeString()
   store.add(data);
 
   tx.oncomplete = () => {
-    alert("Proposal saved!");
-    showPage("savedProposals");
-    renderSavedProposals();
-  };
+  proposalSaved = true;
+
+  showAlert("Proposal saved successfully!", "Success");
+
+  resetAppState();
+  showPage("savedProposals");
+  renderSavedProposals();
+};
+
+
+
 
   tx.onerror = () => {
-    alert("Failed to save proposal");
+    showAlert("Failed to save proposal.", "Error");
+
   };
 }
 
@@ -840,8 +770,7 @@ function exitViewMode(){
     "#newProposal .primary-btn"
   ).style.display = "block";
 
-  // HIDE PREVIEW
-  document.getElementById("proposalPreview").style.display = "none";
+ 
 
   // BALIK SA SAVED LIST
   showPage("savedProposals");
@@ -852,12 +781,13 @@ function deleteAndExit(id){
     tx.objectStore("proposals").delete(id);
 
     tx.oncomplete = () => {
-      alert("Proposal deleted");
+      showAlert("Proposal deleted successfully.", "Success");
       showPage("savedProposals");
       renderSavedProposals();
     };
-  });
+  }, "Delete Proposal");
 }
+
 
 function autoSaveSelling(id, value){
   const newPrice = Number(value);
@@ -876,21 +806,22 @@ function autoSaveSelling(id, value){
   // REALTIME RECALC
   renderCart();
 }
-function showAlert(message, title="Notice"){
+function showAlert(message, title = "Notice"){
   promptTitle.textContent = title;
   promptMessage.textContent = message;
 
   promptCancel.style.display = "none";
-  promptOk.onclick = closePrompt;
 
+  promptOk.onclick = closePrompt;
   promptModal.classList.add("show");
 }
 
-function showConfirm(message, onYes, title="Confirm"){
+function showConfirm(message, onYes, title = "Confirm"){
   promptTitle.textContent = title;
   promptMessage.textContent = message;
 
   promptCancel.style.display = "inline-block";
+
   promptOk.onclick = () => {
     closePrompt();
     onYes();
@@ -902,6 +833,7 @@ function showConfirm(message, onYes, title="Confirm"){
 function closePrompt(){
   promptModal.classList.remove("show");
 }
+
 function resetCartConfirmed(){
   for(const k in cart) delete cart[k];
   renderCart();
@@ -916,3 +848,58 @@ function loadProducts(){
     renderProducts();
   };
 }
+function resetAppState(){
+  for(const k in cart) delete cart[k];
+  renderCart();
+
+  ownerInput.value = "";
+  locationInput.value = "";
+  capitalInput.value = "";
+
+  document.querySelector("#newProposal .primary-btn").disabled = false;
+
+  
+
+  viewOnlyMode = false;
+  proposalSaved = false;
+}
+
+function isTouchDevice(){
+  return (
+    'ontouchstart' in window ||
+    navigator.maxTouchPoints > 0
+  );
+}
+
+if(isTouchDevice()){
+  let lastTouch = 0;
+
+  document.addEventListener("touchend", e => {
+    const now = Date.now();
+    if(now - lastTouch <= 300){
+      e.preventDefault();
+    }
+    lastTouch = now;
+  }, { passive: false });
+}
+
+
+if(isTouchDevice()){
+
+  // ❌ Disable pinch zoom (gesture)
+  document.addEventListener("gesturestart", e => e.preventDefault());
+  document.addEventListener("gesturechange", e => e.preventDefault());
+  document.addEventListener("gestureend", e => e.preventDefault());
+
+  // ❌ Disable double-tap zoom
+  let lastTouchEnd = 0;
+  document.addEventListener("touchend", e => {
+    const now = Date.now();
+    if(now - lastTouchEnd <= 300){
+      e.preventDefault();
+    }
+    lastTouchEnd = now;
+  }, { passive: false });
+
+}
+
