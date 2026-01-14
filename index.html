@@ -39,7 +39,8 @@ content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
 
     <li onclick="showPage('newProposal')">📝 New Proposal</li>
     <li onclick="showSavedProposals()">💾 Saved Proposals</li>
-    <li onclick="closeMenu()">⚙️ Settings</li>
+    <li onclick="showTodayEOD()">📸 EOD Snapshot</li>
+
   </ul>
 </nav>
 
@@ -180,6 +181,21 @@ content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
   </div>
 </section>
 
+<section id="eodPage" class="page">
+  <div class="container">
+
+    <!-- 🔽 MONTH SELECTOR (DITO LALAGAY) -->
+    <div class="eod-filter">
+      <label>Select Month</label>
+      <input type="month" id="eodMonth" onchange="showMonthlyEOD()">
+    </div>
+
+    <!-- 🔽 DITO LALABAS ANG RESULT -->
+    <div id="eodPreview" class="eod-card"></div>
+
+  </div>
+</section>
+
 
 
 </main>
@@ -191,6 +207,10 @@ content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
 
     <label>Name</label>
     <input id="pName" type="text">
+
+    <label>Original Retail Price</label>
+    <input id="pOriginal" type="number">
+
 
     <label>Retail Price</label>
     <input id="pRetail" type="number">
@@ -222,6 +242,10 @@ content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
 
     <label>Name</label>
     <input id="editName" type="text">
+
+    <label>Original Retail Price</label>
+    <input id="editOriginal" type="number">
+
 
     <label>Retail Price</label>
     <input id="editRetail" type="number">
