@@ -1,3 +1,7 @@
+const sideMenu = document.getElementById("sideMenu");
+const menuOverlay = document.getElementById("menuOverlay");
+
+
 let viewOnlyMode = false;
 
 /* ======================
@@ -5,23 +9,32 @@ let viewOnlyMode = false;
 ====================== */
 let db;
 
-const request = indexedDB.open("BusinessProposalDB", 1);
+const request = indexedDB.open("BusinessProposalDB", 3);
 
 request.onupgradeneeded = e => {
   db = e.target.result;
 
-  if(!db.objectStoreNames.contains("proposals")){
+  if (!db.objectStoreNames.contains("proposals")) {
     db.createObjectStore("proposals", {
       keyPath: "id",
       autoIncrement: true
     });
   }
+
+  if (!db.objectStoreNames.contains("products")) {
+    db.createObjectStore("products", {
+      keyPath: "id"
+    });
+  }
 };
+
 
 request.onsuccess = e => {
   db = e.target.result;
   console.log("IndexedDB ready");
+  loadProducts(); // 🔥 ITO ANG KULANG
 };
+
 
 request.onerror = e => {
   console.error("IndexedDB error", e);
@@ -156,7 +169,8 @@ function generateProposal(){
 /* ======================
    DATA
 ====================== */
-let products = JSON.parse(localStorage.getItem("products")) || [];
+let products = [];
+
 /* ======================
    AUTO FIX OLD PRODUCTS (PACK)
 ====================== */
@@ -170,7 +184,13 @@ products.forEach(p=>{
 });
 
 if(needsSave){
-  localStorage.setItem("products", JSON.stringify(products));
+  function saveProducts(){
+  const tx = db.transaction("products", "readwrite");
+  const store = tx.objectStore("products");
+
+  products.forEach(p => store.put(p));
+}
+
 }
 
 
@@ -235,32 +255,49 @@ function renderProducts(){
 
 
 function addProduct(){
+
+  // 🔥 BLOCK BASE64 IMAGES FIRST
+  if(pImg.value.startsWith("data:image")){
+    showAlert(
+      "Huwag base64 image. Gumamit ng image URL lang.",
+      "Invalid Image"
+    );
+    return;
+  }
+
   const p = {
-  id: Date.now(),
-  name: pName.value.trim(),
-  retail: Number(pRetail.value),
-  selling: Number(pSelling.value),
-  img: pImg.value.trim(),
-  pack: Number(pPack.value) || 1   // 🔥 PER PRODUCT PACK
-};
+    id: Date.now(),
+    name: pName.value.trim(),
+    retail: Number(pRetail.value),
+    selling: Number(pSelling.value),
+    img: pImg.value.trim(),
+    pack: Number(pPack.value) || 1
+  };
 
-
+  // 🔥 REQUIRED FIELDS CHECK
   if(!p.name || !p.retail || !p.selling){
-  showAlert(
-    "Please complete all required fields before adding the product.",
-    "Incomplete Information"
-  );
-  return;
-}
+    showAlert(
+      "Please complete all required fields before adding the product.",
+      "Incomplete Information"
+    );
+    return;
+  }
 
-
+  // ✅ SAVE IN MEMORY
   products.push(p);
-  localStorage.setItem("products", JSON.stringify(products));
+
+  // ✅ SAVE IN INDEXEDDB (ITO ANG KULANG MO)
+  const tx = db.transaction("products", "readwrite");
+  tx.objectStore("products").put(p);
+
   closeAddProductModal();
   renderProducts();
 
-  pName.value = pRetail.value = pSelling.value = pImg.value = "";
+  // RESET INPUTS
+  pName.value = pRetail.value = pSelling.value = pImg.value = pPack.value = "";
 }
+
+
 
 /* ======================
    EDIT PRODUCT
@@ -295,7 +332,9 @@ function saveEditProduct(){
   p.img = editImg.value.trim();
   p.pack = Number(editPack.value) || 1;   // 🔥 SAVE PACK
 
-  localStorage.setItem("products", JSON.stringify(products));
+  const tx = db.transaction("products", "readwrite");
+tx.objectStore("products").put(p);
+
   closeEditProductModal();
   renderProducts();
 }
@@ -427,7 +466,10 @@ function deleteProduct(){
   if(!confirm("Delete this product?")) return;
 
   products = products.filter(p=>p.id !== id);
-  localStorage.setItem("products", JSON.stringify(products));
+  
+  const tx = db.transaction("products", "readwrite");
+tx.objectStore("products").delete(id);
+
 
   closeEditProductModal();
   renderProducts();
@@ -828,7 +870,7 @@ function autoSaveSelling(id, value){
   const prod = products.find(p => p.id === id);
   if(prod){
     prod.selling = newPrice;
-    localStorage.setItem("products", JSON.stringify(products));
+    
   }
 
   // REALTIME RECALC
@@ -863,4 +905,14 @@ function closePrompt(){
 function resetCartConfirmed(){
   for(const k in cart) delete cart[k];
   renderCart();
+}
+function loadProducts(){
+  const tx = db.transaction("products", "readonly");
+  const store = tx.objectStore("products");
+  const req = store.getAll();
+
+  req.onsuccess = () => {
+    products = req.result || [];
+    renderProducts();
+  };
 }
