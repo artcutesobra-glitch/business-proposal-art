@@ -857,3 +857,213 @@ button {
 .modal {
   touch-action: manipulation;
 }
+input[readonly] {
+  background: #f4f4f4;
+  color: #555;
+  cursor: not-allowed;
+}
+button {
+  font-family: inherit;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  border-radius: 10px;
+  padding: 12px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px; /* mobile touch standard */
+}
+.primary-btn {
+  background: linear-gradient(135deg, #2563eb, #1e40af);
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.35);
+}
+
+.primary-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.45);
+}
+
+.primary-btn:active {
+  transform: scale(0.97);
+}
+.danger-btn {
+  background: linear-gradient(135deg, #dc2626, #991b1b);
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(220, 38, 38, 0.35);
+}
+
+.danger-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(220, 38, 38, 0.45);
+}
+
+.danger-btn:active {
+  transform: scale(0.97);
+}
+.reset-btn {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.reset-btn:hover {
+  background: #e5e7eb;
+}
+
+.reset-btn:active {
+  transform: scale(0.97);
+}
+button.small-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  min-height: auto;
+  border-radius: 8px;
+}
+.button-group {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+  .button-group {
+    flex-direction: column;
+  }
+
+  .button-group button {
+    width: 100%;
+  }
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+.price-btn {
+  width: 100%;
+  background: #111827;
+  color: #fff;
+  padding: 10px 0;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 700;
+}
+.qty-minus {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+
+  width: 18px;        /* 👈 maliit */
+  height: 18px;       /* 👈 maliit */
+  padding: 0;
+
+  font-size: 12px;    /* 👈 maliit */
+  font-weight: 700;
+  line-height: 1;
+}
+
+.qty-minus:active {
+  transform: scale(0.9);
+}
+.qty-minus {
+  background: transparent;
+  color: #dc2626;
+  border: none;
+  width: 16px;
+  height: 16px;
+  font-size: 12px;
+}
+.selling-edit {
+  width: 38px;              /* maliit lang */
+  height: 28px;
+
+  padding: 2px 6px;
+  font-size: 13px;
+  text-align: right;
+
+  border: 1px solid #d1d5db;
+  border-radius: 6px;       /* 👈 box look */
+  background: #ffffff;
+  outline: none;
+}
+
+/* focus state */
+.selling-edit:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+/* Chrome / Edge / Safari */
+.selling-edit::-webkit-outer-spin-button,
+.selling-edit::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Firefox */
+.selling-edit {
+  -moz-appearance: textfield;
+}
+.qty-minus {
+  all: unset;                 /* 🔥 reset lahat ng default */
+  box-sizing: border-box;
+
+  width: 20px;
+  height: 20px;               /* 👈 TALAGANG BABABA NA */
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: #fee2e2;
+  color: #b91c1c;
+
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;             /* 🔥 critical */
+  cursor: pointer;
+}
+
+.qty-minus:active {
+  transform: scale(0.9);
+}
+/* === ALIGN QTY COLUMN (− + number) === */
+.cart-table td:nth-child(2) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* stabilize the qty number */
+.cart-table td:nth-child(2) span {
+  min-width: 22px;
+  text-align: center;
+}
+
+/* === ALIGN SELLING COLUMN (₱ + input box) === */
+.cart-table td:nth-child(4) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* optional: align peso nicely */
+.cart-table td:nth-child(4)::before {
+  content: "₱";
+  font-size: 13px;
+}
