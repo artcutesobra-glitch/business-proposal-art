@@ -12,10 +12,19 @@ let viewOnlyMode = false;
 ====================== */
 let db;
 
-const request = indexedDB.open("BusinessProposalDB", 3);
+const request = indexedDB.open("BusinessProposalDB", 5);
 
 request.onupgradeneeded = e => {
   db = e.target.result;
+
+  if (!db.objectStoreNames.contains("eod")) {
+  db.createObjectStore("eod", {
+  keyPath: "id"
+});
+
+
+}
+
 
   if (!db.objectStoreNames.contains("proposals")) {
     db.createObjectStore("proposals", {
@@ -201,13 +210,15 @@ function addProduct(){
   }
 
   const p = {
-    id: Date.now(),
-    name: pName.value.trim(),
-    retail: Number(pRetail.value),
-    selling: Number(pSelling.value),
-    img: pImg.value.trim(),
-    pack: Number(pPack.value) || 1
-  };
+  id: Date.now(),
+  name: pName.value.trim(),
+  originalRetail: Number(pOriginal.value), // 🔥
+  retail: Number(pRetail.value),
+  selling: Number(pSelling.value),
+  img: pImg.value.trim(),
+  pack: Number(pPack.value) || 1
+    };
+
 
   if(!p.name || !p.retail || !p.selling){
     showAlert("Please complete all required fields.", "Incomplete");
@@ -237,6 +248,8 @@ function openEditProduct(id){
 
   editId.value = p.id;
   editName.value = p.name;
+  editOriginal.value = p.originalRetail || 0;
+
   editRetail.value = p.retail;
   editSelling.value = p.selling;
   editImg.value = p.img || "";
@@ -256,6 +269,8 @@ function saveEditProduct(){
   if(!p) return;
 
   p.name = editName.value.trim();
+  p.originalRetail = Number(editOriginal.value) || p.originalRetail;
+
   p.retail = Number(editRetail.value);
   p.selling = Number(editSelling.value);
   p.img = editImg.value.trim();
@@ -583,35 +598,59 @@ function saveProposal(){
     return;
   }
 
+  const order = {
+  id: Date.now(), // 🔥 ORDER ID
+  date: new Date().toLocaleDateString(),
+  time: new Date().toLocaleTimeString(),
+  capital: Number(capitalInput.value),
+  products: Object.values(cart).map(p => ({
+    name: p.name,
+    qty: p.qty,
+    retail: p.retail,
+    selling: p.selling
+  }))
+};
+
+
+
   const data = {
     owner: ownerInput.value || "-",
     location: locationInput.value || "-",
-    orders: [
-      {
-        date: new Date().toLocaleDateString(),
-        time: new Date().toLocaleTimeString(),
-        capital: Number(capitalInput.value),
-        products: Object.values(cart).map(p => ({
-          name: p.name,
-          qty: p.qty,
-          retail: p.retail,
-          selling: p.selling
-        }))
-      }
-    ]
+    orders: [order]
   };
+
+
+
+
+
 
   const tx = db.transaction("proposals", "readwrite");
-  const store = tx.objectStore("proposals");
-  store.add(data);
+const store = tx.objectStore("proposals");
 
-  tx.oncomplete = () => {
-    proposalSaved = true;
-    showAlert("Proposal saved successfully!", "Success");
-    resetAppState();
-    showPage("savedProposals");
-    renderSavedProposals();
-  };
+const addReq = store.add(data);
+
+addReq.onsuccess = e => {
+  const proposalId = e.target.result; // 🔥 ITO NA ANG ID
+
+  // 🔥 DITO MO NA TATAWAGIN ANG EOD
+  recordEOD(
+  order,
+  ownerInput.value || "Unknown",
+  proposalId,
+  order.id
+);
+
+
+};
+
+tx.oncomplete = () => {
+  proposalSaved = true;
+  showAlert("Proposal saved successfully!", "Success");
+  resetAppState();
+  showPage("savedProposals");
+  renderSavedProposals();
+};
+
 
   tx.onerror = () => {
     showAlert("Failed to save proposal.", "Error");
@@ -672,10 +711,24 @@ function renderSavedProposals(){
 
 
 function deleteProposal(id){
-  const tx = db.transaction("proposals", "readwrite");
-  tx.objectStore("proposals").delete(id);
-  tx.oncomplete = renderSavedProposals;
+  showConfirm("Delete this proposal?", () => {
+
+    // delete proposal
+    const tx = db.transaction("proposals", "readwrite");
+    tx.objectStore("proposals").delete(id);
+
+    // 🔥 delete linked EOD
+    deleteEODByProposalId(id);
+
+    tx.oncomplete = () => {
+      showAlert("Proposal and EOD deleted.", "Deleted");
+      renderSavedProposals();
+    };
+
+  }, "Delete Proposal");
 }
+
+
 function viewProposal(id){
   if(!db) return;
 
@@ -842,14 +895,19 @@ function exitViewMode(){
 }
 function deleteAndExit(id){
   showConfirm("Delete this proposal?", () => {
+
     const tx = db.transaction("proposals", "readwrite");
     tx.objectStore("proposals").delete(id);
 
+    // 🔥 DELETE EOD TOO
+    deleteEODByProposalId(id);
+
     tx.oncomplete = () => {
-      showAlert("Proposal deleted successfully.", "Success");
+      showAlert("Proposal and EOD deleted.", "Deleted");
       showPage("savedProposals");
       renderSavedProposals();
     };
+
   }, "Delete Proposal");
 }
 
@@ -992,7 +1050,8 @@ function saveNewOrderOnly(){
     const proposal = req.result;
     if(!proposal) return;
 
-    proposal.orders.unshift({
+    const order = {
+  id: Date.now(), // 🔥 ORDER ID
   date: new Date().toLocaleDateString(),
   time: new Date().toLocaleTimeString(),
   capital: Number(capitalInput.value),
@@ -1002,7 +1061,23 @@ function saveNewOrderOnly(){
     retail: p.retail,
     selling: p.selling
   }))
-});
+};
+
+
+    // 🔥 ADD ORDER
+    proposal.orders.unshift(order);
+
+    // 🔥 RECORD EOD
+    recordEOD(
+  order,
+  proposal.owner || "Unknown",
+  currentEditingProposalId,
+  order.id
+);
+
+
+
+
 
     store.put(proposal);
 
@@ -1011,7 +1086,6 @@ function saveNewOrderOnly(){
 
       addOrderMode = false;
       currentEditingProposalId = null;
-      proposalSaved = false; // ensure clean state
 
       resetAppState();
       showPage("savedProposals");
@@ -1019,9 +1093,10 @@ function saveNewOrderOnly(){
     };
   };
 }
+
 function deleteOrder(proposalId, orderIndex){
   showConfirm(
-    `Delete Order ${orderIndex + 1}?`,
+    "Delete this order?",
     () => {
 
       const tx = db.transaction("proposals", "readwrite");
@@ -1033,11 +1108,18 @@ function deleteOrder(proposalId, orderIndex){
         if(!proposal || !proposal.orders) return;
 
         // ❌ REMOVE SPECIFIC ORDER
-        proposal.orders.splice(orderIndex, 1);
+        const removedOrder = proposal.orders.splice(orderIndex, 1)[0];
+
+// 🔥 DELETE EOD OF THIS ORDER ONLY
+deleteEODByOrderId(removedOrder.id);
+
 
         // 🧹 IF NO ORDERS LEFT → DELETE PROPOSAL (OPTIONAL BUT LOGICAL)
         if(proposal.orders.length === 0){
           store.delete(proposalId);
+
+          
+
 
           tx.oncomplete = () => {
             showAlert("Last order deleted. Proposal removed.", "Deleted");
@@ -1071,4 +1153,172 @@ function decreaseQty(id){
   }
 
   renderCart();
+}
+function recordEOD(order, owner, proposalId, orderId){
+
+
+  const now = new Date();
+
+  let profit = 0;
+
+  order.products.forEach(item => {
+    const prod = products.find(p => p.name === item.name);
+    const orp = prod?.originalRetail || 0;
+
+    profit += (item.retail - orp) * item.qty;
+  });
+
+  const eod = {
+  id: Date.now(),
+  proposalId: Number(proposalId),
+  orderId: Number(orderId), // 🔥 ITO ANG IMPORTANTE
+  owner: owner,
+  date: now.toISOString().split("T")[0],
+  time: now.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit'
+  }),
+  profit: profit
+};
+
+
+
+
+  const tx = db.transaction("eod", "readwrite");
+  tx.objectStore("eod").add(eod);
+}
+
+
+
+function showTodayEOD(){
+  showPage("eodPage");
+
+  const monthInput = document.getElementById("eodMonth");
+  if(!monthInput.value){
+    monthInput.value = new Date().toISOString().slice(0,7);
+  }
+
+  showMonthlyEOD();
+}
+
+function showMonthlyEOD(){
+  showPage("eodPage");
+
+  const monthInput = document.getElementById("eodMonth");
+  const month = monthInput.value;
+
+  if(!month){
+    eodPreview.innerHTML = "<p>Please select a month</p>";
+    return;
+  }
+
+  const tx = db.transaction("eod", "readonly");
+  const store = tx.objectStore("eod");
+  const req = store.getAll();
+
+  req.onsuccess = () => {
+    const records = req.result;
+
+    const filtered = records.filter(r =>
+      r.date && r.date.startsWith(month)
+    );
+
+    if(filtered.length === 0){
+      eodPreview.innerHTML = "<p>No EOD records for this month</p>";
+      return;
+    }
+
+    filtered.sort((a,b) => b.id - a.id);
+
+    const grouped = {};
+    filtered.forEach(r => {
+      grouped[r.date] ??= [];
+      grouped[r.date].push(r);
+    });
+
+    let html = `<h3>📊 Monthly EOD – ${month}</h3>`;
+
+    Object.keys(grouped)
+      .sort((a,b) => b.localeCompare(a))
+      .forEach(date => {
+
+        let dayTotal = 0;
+
+        html += `<div class="eod-day">
+          <h4>${date}</h4>
+          <table class="eod-table">
+  <thead>
+    <tr>
+      <th>Time</th>
+      <th>Client</th>
+      <th style="text-align:right">Profit</th>
+    </tr>
+  </thead>
+
+        `;
+
+        grouped[date].forEach(e => {
+          const profit = Number(e.profit || 0);
+          dayTotal += profit;
+
+          html += `
+  <tr>
+    <td style="width:80px; color:#666">
+      ${e.time}
+    </td>
+    <td>
+      ${e.owner}
+    </td>
+    <td style="text-align:right">
+      ₱${profit.toLocaleString()}
+    </td>
+  </tr>
+`;
+
+        });
+
+        html += `
+          <tr class="eod-total">
+  <td colspan="2"><b>TOTAL</b></td>
+  <td style="text-align:right">
+    <b>₱${dayTotal.toLocaleString()}</b>
+  </td>
+</tr>
+
+          </table>
+        </div>
+        `;
+      });
+
+    eodPreview.innerHTML = html;
+  };
+}
+function deleteEODByProposalId(proposalId){
+  const pid = Number(proposalId); // 🔥 FIX
+
+  const tx = db.transaction("eod", "readwrite");
+  const store = tx.objectStore("eod");
+
+  const req = store.getAll();
+  req.onsuccess = () => {
+    req.result.forEach(r => {
+      if(Number(r.proposalId) === pid){
+        store.delete(r.id);
+      }
+    });
+  };
+}
+function deleteEODByOrderId(orderId){
+  const oid = Number(orderId);
+
+  const tx = db.transaction("eod", "readwrite");
+  const store = tx.objectStore("eod");
+
+  store.getAll().onsuccess = e => {
+    e.target.result.forEach(r => {
+      if(Number(r.orderId) === oid){
+        store.delete(r.id);
+      }
+    });
+  };
 }
