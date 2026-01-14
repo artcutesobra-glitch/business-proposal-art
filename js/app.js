@@ -1,8 +1,10 @@
 const sideMenu = document.getElementById("sideMenu");
 const menuOverlay = document.getElementById("menuOverlay");
 
-let proposalSaved = false;
+let currentEditingProposalId = null;
+let addOrderMode = false;
 
+let proposalSaved = false;
 let viewOnlyMode = false;
 
 /* ======================
@@ -59,8 +61,14 @@ function showPage(id){
   closeMenu();
 
   if(id === "newProposal"){
-    loadBusinessInfo();
-  }
+  loadBusinessInfo();
+
+  capitalInput.readOnly = true; // 🔒 LOCK CAPITAL
+
+  const btn = document.querySelector("#newProposal .primary-btn");
+  btn.textContent = addOrderMode ? "Save New Order" : "Generate Proposal";
+}
+
 }
 
 
@@ -76,20 +84,20 @@ function toggleProducts(){
 ====================== */
 function generateProposal(){
 
-  if(proposalSaved){
-  showAlert("Proposal already saved.", "Notice");
-  return;
+  if(!Object.keys(cart).length){
+    showAlert("No selected products", "Notice");
+    return;
+  }
+
+  if(addOrderMode){
+    saveNewOrderOnly();
+  } else {
+    saveProposal();
+  }
 }
 
-if(!Object.keys(cart).length){
-  showAlert("No selected products", "Notice");
-  return;
-}
 
-document.querySelector("#newProposal .primary-btn").disabled = true;
-saveProposal();
 
-}
 
 
 
@@ -166,10 +174,10 @@ function renderProducts(){
         </div>
 
         <button class="price-btn"
-        onclick="addToCart(${p.id}); event.stopPropagation();">
+  onclick="addToCart(${p.id}); event.stopPropagation();">
   ₱${(p.retail * p.pack).toLocaleString()}
-  <small>/ ${p.pack} pcs</small>
 </button>
+
 
 
 
@@ -301,12 +309,19 @@ function renderCart(){
     cartBody.innerHTML += `
 <tr>
   <td>${p.name}</td>
-  <td>${p.qty}</td>
-  <td>₱${retailPerPiece.toLocaleString()}</td>
+  <td style="display:flex; align-items:center; gap:6px;">
+    <button class="qty-minus"
+      onclick="decreaseQty(${p.id})">−</button>
+
+    <span>${p.qty}</span>
+  </td>
+  <td>₱${itemRetail.toLocaleString()}</td>
+
+
 
 
   <td>
-    ₱
+    
     <input type="number"
       class="selling-edit"
       value="${p.selling}"
@@ -564,49 +579,45 @@ function loadBusinessInfo(){
 
 function saveProposal(){
   if(!db){
-  showAlert("Database is still loading. Please try again.", "Loading");
-  return;
-}
-
-
+    showAlert("Database is still loading. Please try again.", "Loading");
+    return;
+  }
 
   const data = {
     owner: ownerInput.value || "-",
     location: locationInput.value || "-",
-    products: Object.values(cart).map(p=>({
-      name: p.name,
-      qty: p.qty,
-      retail: p.retail,
-      selling: p.selling
-    })),
-    date: new Date().toLocaleDateString(),
-time: new Date().toLocaleTimeString()
-
+    orders: [
+      {
+        date: new Date().toLocaleDateString(),
+        time: new Date().toLocaleTimeString(),
+        capital: Number(capitalInput.value),
+        products: Object.values(cart).map(p => ({
+          name: p.name,
+          qty: p.qty,
+          retail: p.retail,
+          selling: p.selling
+        }))
+      }
+    ]
   };
 
   const tx = db.transaction("proposals", "readwrite");
   const store = tx.objectStore("proposals");
-
   store.add(data);
 
   tx.oncomplete = () => {
-  proposalSaved = true;
-
-  showAlert("Proposal saved successfully!", "Success");
-
-  resetAppState();
-  showPage("savedProposals");
-  renderSavedProposals();
-};
-
-
-
+    proposalSaved = true;
+    showAlert("Proposal saved successfully!", "Success");
+    resetAppState();
+    showPage("savedProposals");
+    renderSavedProposals();
+  };
 
   tx.onerror = () => {
     showAlert("Failed to save proposal.", "Error");
-
   };
 }
+
 
 function showSavedProposals(){
   showPage("savedProposals");
@@ -634,21 +645,26 @@ function renderSavedProposals(){
     let html = "";
 
     saved.reverse().forEach(p=>{
-      html += `
-        <div class="saved-proposal-card">
-          <b>${p.owner}</b>
-          <p>📍 ${p.location}</p>
-          <p>🧾 Products: ${p.products.length}</p>
-          <small>${p.date} • ${p.time}</small>
+  const totalOrders = p.orders?.length || 0;
+  const lastOrder = p.orders?.[p.orders.length - 1];
 
+  html += `
+    <div class="saved-proposal-card">
+      <b>${p.owner}</b>
+      <p>📍 ${p.location}</p>
+      <p>🧾 Orders: ${totalOrders}</p>
+      <small>
+        Last order: ${lastOrder?.date || "-"} • ${lastOrder?.time || "-"}
+      </small>
 
-          <button class="primary-btn"
-            onclick="viewProposal(${p.id})">
-            👁 View
-          </button>
-        </div>
-      `;
-    });
+      <button class="primary-btn"
+        onclick="viewProposal(${p.id})">
+        👁 View
+      </button>
+    </div>
+  `;
+});
+
 
     box.innerHTML = html;
   };
@@ -671,41 +687,82 @@ function viewProposal(id){
     const p = req.result;
     if(!p) return;
 
-    let rows = "";
-    let totalQty = 0;
-    let totalRetail = 0;
-    let totalSelling = 0;
-    let totalProfit = 0;
+    if(!p.orders && p.products){
+  p.orders = [{
+    date: p.date || "-",
+    time: p.time || "-",
+    capital: p.capital || 0,
+    products: p.products
+  }];
 
-    p.products.forEach(item=>{
-      const itemRetail = item.retail * item.qty;
-      const itemSelling = item.selling * item.qty;
-      const profit = itemSelling - itemRetail;
+  // optional cleanup
+  delete p.products;
+  delete p.date;
+  delete p.time;
 
-      totalQty += item.qty; // 🔥 ITO ANG KULANG
-      totalRetail += itemRetail;
-      totalSelling += itemSelling;
-      totalProfit += profit;
+  // save migrated structure
+  const fixTx = db.transaction("proposals", "readwrite");
+  fixTx.objectStore("proposals").put(p);
+}
 
-      rows += `
-        <tr>
-          <td>${item.name}</td>
-          <td>${item.qty}</td>
-          <td>₱${itemRetail.toLocaleString()}</td>
-          <td>₱${itemSelling.toLocaleString()}</td>
-          <td>₱${profit.toLocaleString()}</td>
-        </tr>
-      `;
-    });
 
-    document.getElementById("viewPreview").innerHTML = `
-  
+    let html = `
+      <p><b>Owner:</b> ${p.owner}</p>
+      <p><b>Location:</b> ${p.location}</p>
+    `;
 
-  <p><b>Owner:</b> ${p.owner}</p>
-  <p><b>Location:</b> ${p.location}</p>
-  <p><b>Capital:</b> ₱${totalRetail.toLocaleString()}</p>
-  <p><b>Date:</b> ${p.date}${p.time ? " • " + p.time : ""}</p>
+    const orders = p.orders || [
+  {
+    date: p.date || "-",
+    time: p.time || "-",
+    capital: p.capital || 0,
+    products: p.products || []
+  }
+];
 
+orders.forEach((order, index) => {
+
+      let rows = "";
+      let totalQty = 0;
+      let totalRetail = 0;
+      let totalSelling = 0;
+      let totalProfit = 0;
+
+      order.products.forEach(item => {
+        const itemRetail = item.retail * item.qty;
+        const itemSelling = item.selling * item.qty;
+        const profit = itemSelling - itemRetail;
+
+        totalQty += item.qty;
+        totalRetail += itemRetail;
+        totalSelling += itemSelling;
+        totalProfit += profit;
+
+        rows += `
+          <tr>
+            <td>${item.name}</td>
+            <td>${item.qty}</td>
+            <td>₱${itemRetail.toLocaleString()}</td>
+            <td>₱${itemSelling.toLocaleString()}</td>
+            <td>₱${profit.toLocaleString()}</td>
+          </tr>
+        `;
+      });
+
+      const orderNumber = orders.length - index;
+
+html += `
+  <hr>
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <h4>🧾 Order ${orderNumber}</h4>
+    <button class="danger-btn small-btn"
+      onclick="deleteOrder(${id}, ${index})">
+      🗑 Delete Order
+    </button>
+  </div>
+
+  <p><b>Date:</b> ${order.date} • ${order.time}</p>
+  <p><b>Capital:</b> ₱${order.capital.toLocaleString()}</p>
 
   <table class="cart-table">
     <thead>
@@ -723,39 +780,47 @@ function viewProposal(id){
   </table>
 
   <div class="summary-box">
-  <div class="summary-row">
-    <span>Total Qty</span>
-    <strong>${totalQty}</strong>
+    <div class="summary-row">
+      <span>Total Qty</span>
+      <strong>${totalQty}</strong>
+    </div>
+    <div class="summary-row">
+      <span>Total Retail</span>
+      <strong>₱${totalRetail.toLocaleString()}</strong>
+    </div>
+    <div class="summary-row">
+      <span>Total Selling</span>
+      <strong>₱${totalSelling.toLocaleString()}</strong>
+    </div>
+    <div class="summary-row highlight">
+      <span>Total Profit</span>
+      <strong>₱${totalProfit.toLocaleString()}</strong>
+    </div>
   </div>
+`;
 
-  <div class="summary-row">
-    <span>Total Retail</span>
-    <strong>₱${totalRetail.toLocaleString()}</strong>
-  </div>
+    });
 
-  <div class="summary-row">
-    <span>Total Selling</span>
-    <strong>₱${totalSelling.toLocaleString()}</strong>
-  </div>
-
-  <div class="summary-row highlight">
-    <span>Total Profit</span>
-    <strong>₱${totalProfit.toLocaleString()}</strong>
-  </div>
-</div>
-
-
+    html += `
   <div style="display:flex; gap:10px; margin-top:15px;">
-    
-    <button class="danger-btn" onclick="deleteAndExit(${id})">🗑 Delete</button>
+    <button class="reset-btn" onclick="showPage('savedProposals')">
+      ⬅ Back
+    </button>
+    <button class="primary-btn" onclick="startAddNewOrder(${id})">
+      ➕ Add New Order
+    </button>
+    <button class="danger-btn" onclick="deleteAndExit(${id})">
+      🗑 Delete Proposal
+    </button>
   </div>
 `;
 
 
-
+    document.getElementById("viewPreview").innerHTML = html;
     showPage("viewProposal");
   };
 }
+
 
 function exitViewMode(){
   viewOnlyMode = false;
@@ -902,4 +967,108 @@ if(isTouchDevice()){
   }, { passive: false });
 
 }
+function startAddNewOrder(id){
+  currentEditingProposalId = id;
+  addOrderMode = true;
 
+  // fresh cart (new order only)
+  for(const k in cart) delete cart[k];
+  renderCart();
+
+  showPage("home");
+
+  showAlert(
+    "Adding new order. Previous orders will not be changed.",
+    "New Order"
+  );
+}
+function saveNewOrderOnly(){
+  const tx = db.transaction("proposals", "readwrite");
+  const store = tx.objectStore("proposals");
+
+  const req = store.get(currentEditingProposalId);
+
+  req.onsuccess = () => {
+    const proposal = req.result;
+    if(!proposal) return;
+
+    proposal.orders.unshift({
+  date: new Date().toLocaleDateString(),
+  time: new Date().toLocaleTimeString(),
+  capital: Number(capitalInput.value),
+  products: Object.values(cart).map(p => ({
+    name: p.name,
+    qty: p.qty,
+    retail: p.retail,
+    selling: p.selling
+  }))
+});
+
+    store.put(proposal);
+
+    tx.oncomplete = () => {
+      showAlert("New order added successfully!", "Success");
+
+      addOrderMode = false;
+      currentEditingProposalId = null;
+      proposalSaved = false; // ensure clean state
+
+      resetAppState();
+      showPage("savedProposals");
+      renderSavedProposals();
+    };
+  };
+}
+function deleteOrder(proposalId, orderIndex){
+  showConfirm(
+    `Delete Order ${orderIndex + 1}?`,
+    () => {
+
+      const tx = db.transaction("proposals", "readwrite");
+      const store = tx.objectStore("proposals");
+      const req = store.get(proposalId);
+
+      req.onsuccess = () => {
+        const proposal = req.result;
+        if(!proposal || !proposal.orders) return;
+
+        // ❌ REMOVE SPECIFIC ORDER
+        proposal.orders.splice(orderIndex, 1);
+
+        // 🧹 IF NO ORDERS LEFT → DELETE PROPOSAL (OPTIONAL BUT LOGICAL)
+        if(proposal.orders.length === 0){
+          store.delete(proposalId);
+
+          tx.oncomplete = () => {
+            showAlert("Last order deleted. Proposal removed.", "Deleted");
+            showPage("savedProposals");
+            renderSavedProposals();
+          };
+          return;
+        }
+
+        // ✅ SAVE UPDATED PROPOSAL
+        store.put(proposal);
+
+        tx.oncomplete = () => {
+          showAlert("Order deleted successfully!", "Success");
+          viewProposal(proposalId); // 🔄 refresh preview
+        };
+      };
+
+    },
+    "Delete Order"
+  );
+}
+function decreaseQty(id){
+  const p = products.find(x => x.id === id);
+  if(!p || !cart[id]) return;
+
+  cart[id].qty -= p.pack; // 🔽 bawas by pack
+
+  if(cart[id].qty <= 0){
+    delete cart[id]; // auto remove
+  }
+
+  renderCart();
+}
