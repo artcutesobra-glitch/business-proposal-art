@@ -1067,3 +1067,15 @@ button:disabled {
   content: "₱";
   font-size: 13px;
 }
+.eod-card{
+  background:#fff;
+  padding:20px;
+  border-radius:12px;
+  box-shadow:0 10px 25px rgba(0,0,0,.15);
+  max-width:420px;
+  margin:auto;
+}
+.eod-card h3{
+  margin-top:0;
+}
+.eod-table td:first-child { white-space: nowrap; }
