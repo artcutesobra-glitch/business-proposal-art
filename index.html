@@ -1,8 +1,11 @@
+
 <!DOCTYPE html>
 <html lang="tl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport"
+content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
 <title>Business Proposal</title>
 
 <link rel="stylesheet" href="css/style.css">
@@ -141,16 +144,7 @@
       </button>
     </section>
 
-    <!-- PROPOSAL PREVIEW -->
-<section class="card" id="proposalPreview" style="display:none;">
-  <h2>Preview</h2>
-
-  <div id="preview"></div>
-
-  <button class="primary-btn" onclick="saveProposal()">
-    💾 Save Proposal
-  </button>
-</section>
+    
 
 
 
@@ -214,7 +208,8 @@
 
     <div class="modal-actions">
       <button onclick="closeAddProductModal()">Cancel</button>
-      <button onclick="addProduct()">Add</button>
+      <button type="button" onclick="addProduct()">Add</button>
+
     </div>
   </div>
 </div>
